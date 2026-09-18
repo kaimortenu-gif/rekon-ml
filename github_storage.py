@@ -2,8 +2,8 @@
 github_storage.py — Persistent lagring via GitHub for Streamlit Cloud
 
 Brukes av app_train.py til å:
-  - Laste ned feature_store.db og models/*.pkl ved oppstart
-  - Committe oppdatert db og nye modeller tilbake etter trening
+  - Laste ned feature_store.db, models/*.pkl og logs/metrics.csv ved oppstart
+  - Committe oppdatert db, nye modeller og metrics.csv tilbake etter trening
 
 Autentisering via Streamlit Secrets:
     GITHUB_TOKEN  = "ghp_..."
@@ -105,12 +105,21 @@ def upload_file(local_path: Path, remote_path: str, commit_msg: str) -> None:
             raise
 
 
-def sync_from_github(local_db: Path, local_models_dir: Path) -> dict:
+def sync_from_github(
+    local_db: Path,
+    local_models_dir: Path,
+    local_metrics_csv: Path | None = None,
+) -> dict:
     """
-    Last ned feature_store.db og alle modeller fra GitHub ved oppstart.
+    Last ned feature_store.db, modeller og metrics.csv fra GitHub ved oppstart.
     Returnerer en dict med hva som ble lastet ned.
     """
-    result = {"db": False, "models": []}
+    result = {"db": False, "models": [], "metrics": False}
+
+    # metrics.csv – hentes først slik at historikk er synlig
+    # selv om trening ikke kjøres denne sesjonen
+    if local_metrics_csv:
+        result["metrics"] = download_file("logs/metrics.csv", local_metrics_csv)
 
     # feature_store.db
     result["db"] = download_file("data/feature_store.db", local_db)
@@ -140,12 +149,13 @@ def commit_to_github(
     local_db: Path,
     local_models_dir: Path,
     today_str: str,
+    local_metrics_csv: Path | None = None,
 ) -> dict:
     """
-    Commit feature_store.db og nye modeller tilbake til GitHub.
+    Commit feature_store.db, nye modeller og metrics.csv tilbake til GitHub.
     Returnerer dict med hva som ble committet.
     """
-    result = {"db": False, "models": []}
+    result = {"db": False, "models": [], "metrics": False}
     msg    = f"rekon-ml: daglig oppdatering {today_str}"
 
     # feature_store.db
@@ -159,4 +169,14 @@ def commit_to_github(
             upload_file(pkl, f"models/{pkl.name}", msg)
             result["models"].append(pkl.name)
 
+    # metrics.csv – liten fil, alltid nyttig å ha i GitHub
+    if local_metrics_csv and local_metrics_csv.exists():
+        upload_file(local_metrics_csv, "logs/metrics.csv", msg)
+        result["metrics"] = True
+
     return result
+
+
+def sync_metrics_from_github(local_metrics_csv: Path) -> bool:
+    """Last ned metrics.csv fra GitHub ved oppstart."""
+    return download_file("logs/metrics.csv", local_metrics_csv)

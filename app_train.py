@@ -57,7 +57,7 @@ st.caption(
 if "github_synced" not in st.session_state:
     with st.spinner("Laster ned historikk og modeller fra GitHub …"):
         try:
-            sync_result = gs.sync_from_github(LOCAL_DB, LOCAL_MODELS_DIR)
+            sync_result = gs.sync_from_github(LOCAL_DB, LOCAL_MODELS_DIR, mt.METRICS_CSV)
             st.session_state["github_synced"] = True
             st.session_state["sync_result"]   = sync_result
         except RuntimeError as e:
@@ -293,7 +293,7 @@ if n_days2 < mt.MIN_TRAIN_DAYS:
     # Commit db til GitHub selv uten trening
     _log("Committer feature store til GitHub …", 90)
     try:
-        gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str)
+        gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str, mt.METRICS_CSV)
         st.toast("✅ Feature store committet til GitHub", icon="📤")
     except Exception as e:
         st.warning(f"GitHub commit feilet: {e}")
@@ -332,7 +332,7 @@ mt.log_metrics(today_str, n_days2, all_metrics)
 # Commit til GitHub
 _log("Committer til GitHub …", 90)
 try:
-    commit_result = gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str)
+    commit_result = gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str, mt.METRICS_CSV)
     github_ok = True
 except Exception as e:
     st.warning(f"GitHub commit feilet: {e}")
@@ -399,10 +399,12 @@ with r2:
 st.markdown("---")
 if github_ok:
     committed = ", ".join(commit_result.get("models", []))
+    metrics_ok = commit_result.get("metrics", False)
     st.success(
         f"✅ Committet til GitHub:  \n"
         f"- `data/feature_store.db`  \n"
-        + (f"- `models/{committed}`" if committed else "- (ingen nye modeller)")
+        + (f"- `models/{committed}`  \n" if committed else "- (ingen nye modeller)  \n")
+        + (f"- `logs/metrics.csv`" if metrics_ok else "")
     )
 else:
     st.warning("⚠️ GitHub commit feilet – modeller er kun lagret lokalt i denne sesjonen.")
