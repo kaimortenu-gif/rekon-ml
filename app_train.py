@@ -44,7 +44,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📊 Avstemming nomineetransaksjoner – Daglig modelltrening")
+st.title("📊 Oppgjørsrekonsilering – Daglig modelltrening")
 st.caption(
     "Last opp dagens fire filer, se forhåndsvisning og tren modellen. "
     "Feature store og modeller lagres automatisk i GitHub."
@@ -171,7 +171,7 @@ with tab1:
     )
 with tab2:
     _preview_df(
-        af_df[["trade_date","settle_date","isin","institution","direction","amount_nok"]],
+        af_df[["trade_date","settle_date","isin","af_code","direction","amount_nok"]],
         "Allfunds – eksterne transaksjoner"
     )
 with tab3:
