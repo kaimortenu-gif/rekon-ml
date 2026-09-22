@@ -285,11 +285,6 @@ all_data = mt.load_all_features()
 n_days2  = all_data["trade_date"].nunique()
 
 if n_days2 < mt.MIN_TRAIN_DAYS:
-    progress.progress(100, text="Ferdig")
-    st.warning(
-        f"**{n_days2}/{mt.MIN_TRAIN_DAYS} dager** i feature store. "
-        f"Lagret i GitHub – kom tilbake om {mt.MIN_TRAIN_DAYS - n_days2} dager."
-    )
     # Commit db til GitHub selv uten trening
     _log("Committer feature store til GitHub …", 90)
     try:
@@ -297,114 +292,117 @@ if n_days2 < mt.MIN_TRAIN_DAYS:
         st.toast("✅ Feature store committet til GitHub", icon="📤")
     except Exception as e:
         st.warning(f"GitHub commit feilet: {e}")
-    st.stop()
-
-# Walk-forward split
-_log("Walk-forward split …", 45)
-all_data = all_data.sort_values("trade_date")
-cutoff   = pd.Timestamp(today_date)
-train_df = all_data[all_data["trade_date"] < cutoff].copy()
-val_df   = all_data[all_data["trade_date"] == cutoff].copy()
-
-# Lag 1 – XGBoost
-_log("Trener Lag 1 – XGBoost …", 55)
-try:
-    _, agg_m = mt.train_aggregation_model(train_df, val_df, today_str)
-    all_metrics.update(agg_m)
-except Exception as e:
-    st.error(f"Lag 1 feilet: {e}")
-    all_metrics["lag1_status"] = f"error: {e}"
-
-# Lag 3 – Random Forest
-_log("Trener Lag 3 – Random Forest …", 70)
-try:
-    _, _, clf_m = mt.train_classifier(train_df, val_df, today_str)
-    all_metrics.update(clf_m)
-except Exception as e:
-    st.error(f"Lag 3 feilet: {e}")
-    all_metrics["lag3_status"] = f"error: {e}"
-
-# Logger metrics
-_log("Logger metrics …", 82)
-all_metrics["train_days"] = n_days2
-mt.log_metrics(today_str, n_days2, all_metrics)
-
-# Commit til GitHub
-_log("Committer til GitHub …", 90)
-try:
-    commit_result = gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str, mt.METRICS_CSV)
-    github_ok = True
-except Exception as e:
-    st.warning(f"GitHub commit feilet: {e}")
-    commit_result = {"db": False, "models": []}
-    github_ok = False
-
-progress.progress(100, text="✅ Ferdig")
-
-# ---------------------------------------------------------------------------
-# Resultater
-# ---------------------------------------------------------------------------
-
-st.markdown("---")
-st.subheader("Resultater")
-
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Treningsdager", n_days2)
-m2.metric("Treningsrader", f"{len(train_df):,}")
-
-lag1_pct = all_metrics.get("lag1_mae_pct")
-if lag1_pct is not None:
-    m3.metric(
-        "Lag 1 MAE",
-        f"{lag1_pct:.2f}%",
-        delta="OK" if lag1_pct < 0.5 else "Høy",
-        delta_color="normal" if lag1_pct < 0.5 else "inverse",
+    progress.progress(100, text="✅ Ferdig")
+    st.markdown("---")
+    st.subheader("Resultater")
+    st.info(
+        f"**{n_days2}/{mt.MIN_TRAIN_DAYS} dager** i feature store – samler historikk.  \n"
+        f"Modelltrening starter automatisk om **{mt.MIN_TRAIN_DAYS - n_days2} dager**.  \n"
+        f"Feature store og metrics er lagret i GitHub."
     )
+
 else:
-    m3.metric("Lag 1 MAE", all_metrics.get("lag1_status", "–"))
+    # Walk-forward split
+    _log("Walk-forward split …", 45)
+    all_data = all_data.sort_values("trade_date")
+    cutoff   = pd.Timestamp(today_date)
+    train_df = all_data[all_data["trade_date"] < cutoff].copy()
+    val_df   = all_data[all_data["trade_date"] == cutoff].copy()
 
-lag3_f1 = all_metrics.get("lag3_f1_macro")
-m4.metric("Lag 3 F1 makro", f"{lag3_f1:.3f}" if lag3_f1 else all_metrics.get("lag3_status", "–"))
+    # Lag 1 – XGBoost
+    _log("Trener Lag 1 – XGBoost …", 55)
+    try:
+        _, agg_m = mt.train_aggregation_model(train_df, val_df, today_str)
+        all_metrics.update(agg_m)
+    except Exception as e:
+        st.error(f"Lag 1 feilet: {e}")
+        all_metrics["lag1_status"] = f"error: {e}"
 
-# Bruddfordeling og metrics-historikk
-r1, r2 = st.columns(2)
+    # Lag 3 – Random Forest
+    _log("Trener Lag 3 – Random Forest …", 70)
+    try:
+        _, _, clf_m = mt.train_classifier(train_df, val_df, today_str)
+        all_metrics.update(clf_m)
+    except Exception as e:
+        st.error(f"Lag 3 feilet: {e}")
+        all_metrics["lag3_status"] = f"error: {e}"
 
-with r1:
-    st.markdown("**Bruddfordeling – treningsdata**")
-    breaks_in_train = train_df[
-        train_df["break_type"].notna() &
-        ~train_df["break_type"].isin(["NO_BREAK", "UNLABELLED"])
-    ]
-    if not breaks_in_train.empty:
-        dist = (breaks_in_train["break_type"]
-                .value_counts()
-                .reset_index()
-                .rename(columns={"break_type": "Årsak", "count": "Antall"}))
-        st.dataframe(dist, use_container_width=True, hide_index=True)
+    # Logger metrics
+    _log("Logger metrics …", 82)
+    all_metrics["train_days"] = n_days2
+    mt.log_metrics(today_str, n_days2, all_metrics)
+
+    # Commit til GitHub
+    _log("Committer til GitHub …", 90)
+    try:
+        commit_result = gs.commit_to_github(LOCAL_DB, LOCAL_MODELS_DIR, today_str, mt.METRICS_CSV)
+        github_ok = True
+    except Exception as e:
+        st.warning(f"GitHub commit feilet: {e}")
+        commit_result = {"db": False, "models": []}
+        github_ok = False
+
+    progress.progress(100, text="✅ Ferdig")
+
+    # Resultater
+    st.markdown("---")
+    st.subheader("Resultater")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Treningsdager", n_days2)
+    m2.metric("Treningsrader", f"{len(train_df):,}")
+
+    lag1_pct = all_metrics.get("lag1_mae_pct")
+    if lag1_pct is not None:
+        m3.metric(
+            "Lag 1 MAE",
+            f"{lag1_pct:.2f}%",
+            delta="OK" if lag1_pct < 0.5 else "Høy",
+            delta_color="normal" if lag1_pct < 0.5 else "inverse",
+        )
     else:
-        st.caption("Ingen merkede brudd i treningsdata ennå.")
+        m3.metric("Lag 1 MAE", all_metrics.get("lag1_status", "–"))
 
-with r2:
-    st.markdown("**Metrics-historikk (siste 10 dager)**")
-    if mt.METRICS_CSV.exists():
-        hist = pd.read_csv(mt.METRICS_CSV).tail(10)
-        show_cols = [c for c in ["date","train_days","lag1_mae_pct",
-                                  "lag1_status","lag3_f1_macro","lag3_status"]
-                     if c in hist.columns]
-        st.dataframe(hist[show_cols], use_container_width=True, hide_index=True)
+    lag3_f1 = all_metrics.get("lag3_f1_macro")
+    m4.metric("Lag 3 F1 makro", f"{lag3_f1:.3f}" if lag3_f1 else all_metrics.get("lag3_status", "–"))
+
+    r1, r2 = st.columns(2)
+
+    with r1:
+        st.markdown("**Bruddfordeling – treningsdata**")
+        breaks_in_train = train_df[
+            train_df["break_type"].notna() &
+            ~train_df["break_type"].isin(["NO_BREAK", "UNLABELLED"])
+        ]
+        if not breaks_in_train.empty:
+            dist = (breaks_in_train["break_type"]
+                    .value_counts()
+                    .reset_index()
+                    .rename(columns={"break_type": "Aarsak", "count": "Antall"}))
+            st.dataframe(dist, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Ingen merkede brudd i treningsdata ennaa.")
+
+    with r2:
+        st.markdown("**Metrics-historikk (siste 10 dager)**")
+        if mt.METRICS_CSV.exists():
+            hist = pd.read_csv(mt.METRICS_CSV).tail(10)
+            show_cols = [c for c in ["date","train_days","lag1_mae_pct",
+                                      "lag1_status","lag3_f1_macro","lag3_status"]
+                         if c in hist.columns]
+            st.dataframe(hist[show_cols], use_container_width=True, hide_index=True)
+        else:
+            st.caption("Ingen historikk ennaa.")
+
+    st.markdown("---")
+    if github_ok:
+        committed = ", ".join(commit_result.get("models", []))
+        metrics_ok = commit_result.get("metrics", False)
+        st.success(
+            "Committet til GitHub:\n"
+            "- data/feature_store.db\n"
+            + (f"- models/{committed}\n" if committed else "- (ingen nye modeller)\n")
+            + ("- logs/metrics.csv" if metrics_ok else "")
+        )
     else:
-        st.caption("Ingen historikk ennå.")
-
-# GitHub-status
-st.markdown("---")
-if github_ok:
-    committed = ", ".join(commit_result.get("models", []))
-    metrics_ok = commit_result.get("metrics", False)
-    st.success(
-        f"✅ Committet til GitHub:  \n"
-        f"- `data/feature_store.db`  \n"
-        + (f"- `models/{committed}`  \n" if committed else "- (ingen nye modeller)  \n")
-        + (f"- `logs/metrics.csv`" if metrics_ok else "")
-    )
-else:
-    st.warning("⚠️ GitHub commit feilet – modeller er kun lagret lokalt i denne sesjonen.")
+        st.warning("GitHub commit feilet - modeller er kun lagret lokalt i denne sesjonen.")
