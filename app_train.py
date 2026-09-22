@@ -44,7 +44,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📊 Oppgjørsrekonsilering – Daglig modelltrening")
+st.title("📊 Avstemming nomineetransaksjoner – Daglig modelltrening")
 st.caption(
     "Last opp dagens fire filer, se forhåndsvisning og tren modellen. "
     "Feature store og modeller lagres automatisk i GitHub."
